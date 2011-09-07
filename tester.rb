@@ -1,5 +1,15 @@
 #!/usr/bin/env ruby
 
+trap('SIGINT'){
+	begin
+	File.delete(programPath) unless $keep
+	rescue
+	end
+	puts
+	exit 1
+}
+
+require 'timeout'
 require 'optparse'
 require 'find'
 require 'date'
@@ -28,6 +38,15 @@ end
 def printCase(caseNum, result, answer, time, pass)
     caseN = caseNum.to_s
     width = `tput cols`.to_i
+    if time.nil?
+    	time = ""
+    end
+    if result.nil?
+    	result = ""
+    end
+    if answer.nil?
+    	answer = ""
+    end
     unless $simple
         if result.split("\n").count > 1 || answer.split("\n").count > 1
             puts "Case ##{caseN}: #{pass}\t#{time}"
@@ -37,8 +56,13 @@ def printCase(caseNum, result, answer, time, pass)
                 i += 1
                 puts magenta("\t#{line}\t\t#{aLines[i]}")
             end
-        else
+        end
+        if result.length >= 1 || answer.length >= 1
             string = "Case ##{caseN}: #{result} => #{answer}"
+            puts string+"%#{width - string.length - pass.length + 9 - 1}s #{pass}" % time.to_s # 9 is the number of extra characters to output color
+        end
+        if result.length == 0 || answer.length == 0
+        	string = "Case ##{caseN}: TIMEOUT"
             puts string+"%#{width - string.length - pass.length + 9 - 1}s #{pass}" % time.to_s # 9 is the number of extra characters to output color
         end
     else
@@ -102,9 +126,16 @@ if $outExt.nil?
     $outExt = '.out'
 end
 
-programPath = '"#{File.join($testDir, File.basename($source, File.extname($source))}"'
+programPath = File.join($testDir, File.basename($source, File.extname($source)))
 
-system "gcc -o #{programPath} #{$source}"
+if File.extname($source) == ".c"
+	system "gcc -o #{programPath} #{$source}"
+elsif File.extname($source) == ".cpp"
+	system "g++ -o #{programPath} #{$source}"
+else
+    puts "This program only works with C or C++ source code."
+end
+
 caseNum = -1
 pass = 0
 timeout = 0
@@ -117,27 +148,29 @@ Find.find($testDir) do |path|
         end
         result = ""
         time = Time.now
-        IO.popen(programPath, 'r+') {|test|
-            start = Time.now
-            test.write(IO.read(path))
-            result = test.read
-            time = Time.now - start
-        }
-        answer = IO.read(path[0..-4]+$outExt)
+        begin
+ 			Timeout::timeout($max) do
+    			IO.popen(programPath, 'r+') {|test|
+		        start = Time.now
+		        test.write(IO.read(path))
+		        result = test.read
+		        time = Time.now - start
+		 	   }
+  			end
+        answer = IO.read(path[0..-(($inExt.length)+1)]+$outExt)
         answer = (answer.gsub /\r\n?/, "\n").strip
         result = (result.gsub /\r\n?/, "\n").strip
         if answer == result
-            if time < $max
-                printCase(caseNum, result, answer, time, green(" OK "))
-                pass += 1
-            else
-                printCase(caseNum, result, answer, time, yellow("TIME"))
-                timeout += 1
-            end
+            printCase(caseNum, result, answer, time, green(" OK "))
+            pass += 1
         else
             printCase(caseNum, result, answer, time, red("FAIL"))
             fail += 1
         end
+        rescue Timeout::Error
+  			printCase(caseNum, result, answer, nil, yellow("TIME"))
+            timeout += 1
+		end
     end
 end
 
@@ -145,6 +178,7 @@ unless $onlyCase.nil?
     caseNum = 1
 end
 
+caseNum = pass+fail+timeout
 puts "Got #{(pass.to_f/caseNum)*100}% correct. (#{pass} out of #{caseNum}.) #{timeout} timeouts, #{fail} incorrect."
 
 begin
