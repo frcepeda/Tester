@@ -35,39 +35,9 @@ def ask(string)
     return gets.strip
 end
 
-def printCase(caseNum, result, answer, time, pass)
-    caseN = caseNum.to_s
-    width = `tput cols`.to_i
-    if time.nil?
-    	time = ""
-    end
-    if result.nil?
-    	result = ""
-    end
-    if answer.nil?
-    	answer = ""
-    end
-    unless $simple
-        if result.split("\n").count > 1 || answer.split("\n").count > 1
-            puts "Case ##{caseN}: #{pass}\t#{time}"
-            i = -1
-            aLines = answer.split("\n")
-            for line in result.split("\n")
-                i += 1
-                puts magenta("\t#{line}\t\t#{aLines[i]}")
-            end
-        end
-        if result.length >= 1 || answer.length >= 1
-            string = "Case ##{caseN}: #{result} => #{answer}"
-            puts string+"%#{width - string.length - pass.length + 9 - 1}s #{pass}" % time.to_s # 9 is the number of extra characters to output color
-        end
-        if result.length == 0 || answer.length == 0
-        	string = "Case ##{caseN}: TIMEOUT"
-            puts string+"%#{width - string.length - pass.length + 9 - 1}s #{pass}" % time.to_s # 9 is the number of extra characters to output color
-        end
-    else
-        puts "Case ##{caseN}: #{pass}\t#{time}"
-    end
+def printCase(caseNum, result, answer, time, pass, dir)
+    dir = nil unless $showDirs
+    puts "Case #%02s: #{pass}\t%.06ss\t#{dir}" % [caseNum, time]
 end
 
 opts = OptionParser.new
@@ -84,20 +54,24 @@ opts.on('-t time', 'Maximum time to finish') { |time|
     $max = time.to_f
 }
 
-opts.on('-c case number', 'Only evaluate this case.') { |time|
+opts.on('-c case number', 'Only evaluate this case') { |time|
     $onlyCase = time.to_i
 }
 
-opts.on('-i extension', 'Extension of input files.') { |extension|
+opts.on('-i extension', 'Extension of input files') { |extension|
     $inExt = extension.strip
 }
 
-opts.on('-o extension', 'Extension of output files.') { |extension|
+opts.on('-o extension', 'Extension of output files') { |extension|
     $outExt = extension.strip
 }
 
-opts.on('--simple', 'Only show pass or fail') { |name|
-    $simple = true
+opts.on('-p points', 'Points per case') { |points|
+    $points = points.to_i
+}
+
+opts.on('--path', 'Show the input file\'s path') { |name|
+    $showDirs = true
 }
 
 opts.on('-k', 'Keep the compiled code') { |name|
@@ -107,11 +81,11 @@ opts.on('-k', 'Keep the compiled code') { |name|
 opts.parse!
 
 if $source.nil?
-    $source = ask("Source?").strip
+    $source = ask("Source?")
 end
 
 if $testDir.nil?
-    $testDir = File.realdirpath(ask("Test directory?")).strip
+    $testDir = File.realdirpath(ask("Test directory?"))
 end
 
 if $max.nil?
@@ -119,11 +93,19 @@ if $max.nil?
 end
 
 if $inExt.nil?
-    $inExt = '.in'
+    $inExt = ask("Input extension?")
 end
 
 if $outExt.nil?
-    $outExt = '.out'
+    $outExt = ask("Output extension?")
+end
+
+if $inExt[0] != '.'
+    $inExt = '.' + $inExt
+end
+
+if $outExt[0] != '.'
+    $outExt = '.' + $outExt
 end
 
 programPath = File.join($testDir, File.basename($source, File.extname($source)))
@@ -134,12 +116,12 @@ elsif File.extname($source) == ".cpp"
 	system "g++ -o #{programPath} #{$source}"
 else
     puts "This program only works with C or C++ source code."
+    exit 1
 end
 
 caseNum = -1
-pass = 0
-timeout = 0
-fail = 0
+pass = timeout = fail = 0
+
 Find.find($testDir) do |path|
     if File.extname(path) == $inExt
         caseNum += 1
@@ -147,39 +129,44 @@ Find.find($testDir) do |path|
             next
         end
         result = ""
+        test = IO.popen(programPath, 'r+')
         time = Time.now
         begin
- 			Timeout::timeout($max) do
-    			IO.popen(programPath, 'r+') {|test|
-		        start = Time.now
-		        test.write(IO.read(path))
-		        result = test.read
-		        time = Time.now - start
-		 	   }
-  			end
-        answer = IO.read(path[0..-(($inExt.length)+1)]+$outExt)
-        answer = (answer.gsub /\r\n?/, "\n").strip
-        result = (result.gsub /\r\n?/, "\n").strip
-        if answer == result
-            printCase(caseNum, result, answer, time, green(" OK "))
-            pass += 1
-        else
-            printCase(caseNum, result, answer, time, red("FAIL"))
-            fail += 1
-        end
+            Timeout::timeout($max) do
+                test.write(IO.read(path))
+                test.write('\n')
+                result = test.read
+                time = Time.now - time
+            end
+            answer = IO.read(path[0..-(($inExt.length)+1)]+$outExt)
+            answer = (answer.gsub /\r\n?/, "\n").strip
+            result = (result.gsub /\r\n?/, "\n").strip
+            if answer == result
+                printCase(caseNum, result, answer, time, green(" OK "), path)
+                pass += 1
+            else
+                printCase(caseNum, result, answer, time, red("FAIL"), path)
+                fail += 1
+            end
         rescue Timeout::Error
-  			printCase(caseNum, result, answer, nil, yellow("TIME"))
+            Process.kill('SIGTERM', test.pid)
+            printCase(caseNum, result, answer, (Time.now-time), yellow("TIME"), path)
             timeout += 1
-		end
+            test.close
+        end
     end
 end
 
-unless $onlyCase.nil?
-    caseNum = 1
-end
-
 caseNum = pass+fail+timeout
-puts "Got #{(pass.to_f/caseNum)*100}% correct. (#{pass} out of #{caseNum}.) #{timeout} timeouts, #{fail} incorrect."
+if caseNum > 0
+    if $points.nil?
+        puts "%.5s%% correct. (#{pass} out of #{caseNum}.) #{timeout} timeouts, #{fail} incorrect." % ((pass.to_f/caseNum)*100)
+    else
+        puts "#{pass*$points} points. (#{pass} out of #{caseNum}.) #{timeout} timeouts, #{fail} incorrect."
+    end
+else
+    puts red("Error: ")+"No input files found."
+end
 
 begin
 File.delete(programPath) unless $keep
