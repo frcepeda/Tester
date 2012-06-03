@@ -131,7 +131,7 @@ if $testDir.nil?
 end
 
 if $max.nil?
-	$max = ask("Maximum time?").to_f
+	$max = 1.to_f
 end
 
 if $inExt.nil?
