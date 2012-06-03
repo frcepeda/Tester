@@ -135,11 +135,11 @@ if $max.nil?
 end
 
 if $inExt.nil?
-	$inExt = ask("Input extension?")
+	$inExt = '.in'
 end
 
 if $outExt.nil?
-	$outExt = ask("Output extension?")
+	$outExt = '.out'
 end
 
 if $inExt[0] != '.'
@@ -192,7 +192,7 @@ testCases.sort! { |a,b|
 
 for path in testCases
 	caseNum += 1
-	if $onlyCase.nil? == false && caseNum != $onlyCase
+	if $onlyCase.nil? == false and caseNum != $onlyCase
 		next
 	end
 	result = ""
@@ -241,6 +241,7 @@ if caseNum > 0
 	end
 else
 	puts red("Error: ")+"No input files found."
-end
+	puts "Check that you inputted the correct testing directory, or try setting the -i and -o flags to the extension of the test cases."
+	end
 
 cleanup
