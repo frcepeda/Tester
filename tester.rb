@@ -206,7 +206,10 @@ for path in testCases
 	time = Time.now
 	begin
 		Timeout::timeout($max) do
-			stdin.write(IO.read(path)+"\n")
+			begin
+				stdin.write(IO.read(path)+"\n")
+			rescue Errno::EPIPE
+			end
 			result = stdout.read
 			time = Time.now - time
 		end
