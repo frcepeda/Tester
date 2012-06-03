@@ -82,7 +82,7 @@ end
 
 def printCase(caseNum, result, answer, time, pass, dir)
 	dir = nil if $doNotShowDirs
-	puts "Case #%02s: #{pass}\t%.06ss\t#{dir}" % [caseNum, time]
+	puts "Case #%02s: #{pass}\t%.06ss\t#{dir}" % [caseNum, time] unless $succint
 end
 
 opts = OptionParser.new
@@ -121,6 +121,10 @@ opts.on('--nopath', 'Do not show the input file\'s path') { |name|
 
 opts.on('-k', 'Keep the compiled code') { |name|
 	$keep = true
+}
+
+opts.on('--succint', 'Only show the final statistics.') { |name|
+	$succint = true
 }
 
 opts.parse!
@@ -246,7 +250,7 @@ if caseNum > 0
 	if $points.nil?
 		puts "%.5s%% correct. (#{passed} out of #{caseNum})"  % ((passed.to_f/caseNum)*100)
 	else
-		puts "#{pass*$points} points. (#{passed} out of #{caseNum})"
+		puts "#{passed*$points} points. (#{passed} out of #{caseNum})"
 	end
 	puts "#{passed} correct, #{timeout} timeouts, #{failed} incorrect, #{rte} runtime errors."
 else
