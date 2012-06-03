@@ -166,7 +166,7 @@ if File.extname($source) == ".c"
 elsif File.extname($source) == ".cpp"
 	system "g++ -o #{$programPath} #{$source} &> #{$compilerOutput.path}"
 else
-	puts "This program only works with C or C++ source code."
+	$stderr.puts "This program only works with C or C++ source code."
 	exit 1
 end
 
@@ -174,10 +174,10 @@ compilerMessages = $compilerOutput.read
 
 unless compilerMessages.empty?
 	unless File.exists?($programPath)
-		puts red("Couldn't compile the program.")
+		$stderr.puts red("Couldn't compile the program.")
 	end
-	puts yellow("Compiler output:")
-	puts compilerMessages
+	$stderr.puts yellow("Compiler output:")
+	$stderr.puts compilerMessages
 end
 
 unless File.exists?($programPath)
@@ -254,8 +254,8 @@ if caseNum > 0
 	end
 	puts "#{passed} correct, #{timeout} timeouts, #{failed} incorrect, #{rte} runtime errors."
 else
-	puts red("Error: ")+"No input files found."
-	puts "Check that you inputted the correct testing directory, or try setting the -i and -o flags to the extension of the test cases."
+	$stderr.puts red("Error: ")+"No input files found."
+	$stderr.puts "Check that you inputted the correct testing directory, or try setting the -i and -o flags to the extension of the test cases."
 	end
 
 cleanup
