@@ -184,7 +184,8 @@ Find.find($testDir) do |path|
 	end
 end
 
-caseNum = passed = timeout = failed = rte = 0
+caseNum = -1
+passed = timeout = failed = rte = 0
 
 testCases.sort! { |a,b|
 	grouped_compare(a,b)
