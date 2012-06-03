@@ -78,7 +78,7 @@ end
 # end of sorting methods
 
 def printCase(caseNum, result, answer, time, pass, dir)
-	dir = nil unless $showDirs
+	dir = nil if $doNotShowDirs
 	puts "Case #%02s: #{pass}\t%.06ss\t#{dir}" % [caseNum, time]
 end
 
@@ -112,8 +112,8 @@ opts.on('-p points', 'Points per case') { |points|
 	$points = points.to_i
 }
 
-opts.on('--path', 'Show the input file\'s path') { |name|
-	$showDirs = true
+opts.on('--nopath', 'Do not show the input file\'s path') { |name|
+	$doNotShowDirs = true
 }
 
 opts.on('-k', 'Keep the compiled code') { |name|
