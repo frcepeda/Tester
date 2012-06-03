@@ -39,7 +39,8 @@ def cyan(text); colorize(text, 36); end
 def white(text); colorize(text, 37); end
 
 def ask(string)
-	print string+" "
+	puts string
+	print "> "
 	return gets.strip
 end
 
