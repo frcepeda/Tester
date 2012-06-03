@@ -1,11 +1,13 @@
 #!/usr/bin/env ruby
 
+require 'Tempfile'
 require 'Open3'
 
 def cleanup
 	begin
 		File.delete($programPath) unless $keep
-		File.delete(".compilerMessage")
+		$compilerOutput.close
+		$compilerOutput.unlink
 	rescue
 	end
 end
@@ -153,16 +155,18 @@ end
 
 $programPath = File.join($testDir, File.basename($source, File.extname($source)))
 
+$compilerOutput = Tempfile.new("compiler")
+
 if File.extname($source) == ".c"
-	system "gcc -o #{$programPath} #{$source} &> .compilerMessage"
+	system "gcc -o #{$programPath} #{$source} &> #{$compilerOutput.path}"
 elsif File.extname($source) == ".cpp"
-	system "g++ -o #{$programPath} #{$source} &> .compilerMessage"
+	system "g++ -o #{$programPath} #{$source} &> #{$compilerOutput.path}"
 else
 	puts "This program only works with C or C++ source code."
 	exit 1
 end
 
-compilerMessages = IO.read(".compilerMessage");
+compilerMessages = $compilerOutput.read
 
 unless compilerMessages.empty?
 	unless File.exists?($programPath)
