@@ -184,7 +184,7 @@ Find.find($testDir) do |path|
 	end
 end
 
-caseNum = pass = timeout = failed = 0
+caseNum = passed = timeout = failed = rte = 0
 
 testCases.sort! { |a,b|
 	grouped_compare(a,b)
@@ -213,13 +213,13 @@ for path in testCases
 
 		if answer == result
 			printCase(caseNum, result, answer, time, green(" OK "), path)
-			pass += 1
+			passed += 1
 		elsif status.exited?
 			printCase(caseNum, result, answer, time, red(" WA "), path)
 			failed += 1
 		else
 			printCase(caseNum, result, answer, time, orange("RTE "), path)
-			failed += 1
+			rte += 1
 		end
 	rescue Timeout::Error
 		Process.kill('SIGTERM', wait_thr.pid)
@@ -232,13 +232,14 @@ for path in testCases
 	stderr.close
 end
 
-caseNum = pass+failed+timeout
+caseNum = passed+failed+timeout+rte
 if caseNum > 0
 	if $points.nil?
-		puts "%.5s%% correct. (#{pass} out of #{caseNum}.) #{timeout} timeouts, #{failed} incorrect." % ((pass.to_f/caseNum)*100)
+		puts "%.5s%% correct. (#{passed} out of #{caseNum})"  % ((passed.to_f/caseNum)*100)
 	else
-		puts "#{pass*$points} points. (#{pass} out of #{caseNum}.) #{timeout} timeouts, #{failed} incorrect."
+		puts "#{pass*$points} points. (#{passed} out of #{caseNum})"
 	end
+	puts "#{passed} correct, #{timeout} timeouts, #{failed} incorrect, #{rte} runtime errors."
 else
 	puts red("Error: ")+"No input files found."
 	puts "Check that you inputted the correct testing directory, or try setting the -i and -o flags to the extension of the test cases."
