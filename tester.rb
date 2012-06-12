@@ -4,13 +4,10 @@ require 'Tempfile'
 require 'Open3'
 
 def cleanup
-	begin
-		File.delete($programPath) unless $keep
-		File.delete($evaluatorPath) unless $keep or not $evaluator
-		Process.kill('SIGTERM', $wait_thr.pid)
-		Process.kill('SIGTERM', $ewait_thr.pid) unless not $evaluator
-	rescue
-	end
+	begin; File.delete($programPath) unless $keep; rescue; end
+	begin; File.delete($evaluatorPath) unless $keep or not $evaluator; rescue; end
+	begin; Process.kill('SIGTERM', $wait_thr.pid); rescue; end
+	begin; Process.kill('SIGTERM', $ewait_thr.pid) unless not $evaluator; rescue; end
 end
 
 trap('SIGINT'){
