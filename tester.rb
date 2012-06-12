@@ -180,6 +180,10 @@ opts.on('-k', 'Keep the compiled code') {
 	$keep = true
 }
 
+opts.on('--concat', 'Concatenate and send the input and output of the program to the evaluator') { |source|
+	$concat = true
+}
+
 opts.on('--succint', 'Only show the final statistics.') {
 	$succint = true
 }
@@ -249,7 +253,8 @@ for path in testCases
 	begin
 		Timeout::timeout($max) do
 			begin
-				stdin.write(IO.read(path)+"\n")
+				stdin.write(IO.read(path))
+				stdin.flush
 			rescue Errno::EPIPE
 			end
 			result = stdout.read
@@ -270,7 +275,9 @@ for path in testCases
 				estdin, estdout, estderr, $ewait_thr = Open3.popen3($evaluatorPath)
 				Timeout::timeout($evalMax) do
 					begin
+						estdin.write(IO.read(path)) if $concat
 						estdin.write(result)
+						estdin.flush
 					rescue Errno::EPIPE
 					end
 					eresult = estdout.read
