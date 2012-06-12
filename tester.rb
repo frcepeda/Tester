@@ -269,8 +269,12 @@ for path in testCases
 					eresult = estdout.read
 				end
 
-				evaluatorPassed = $ewait_thr.value.success?
-			rescue Timeout::Error
+				evalstatus = $ewait_thr.value
+
+				raise "ERROR!" if not evalstatus.exited?
+
+				evaluatorPassed = evalstatus.success?
+			rescue
 				begin
 					Process.kill('SIGTERM', $ewait_thr.pid)
 				rescue Errno::ESRCH # couldn't kill
