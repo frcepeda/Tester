@@ -78,9 +78,16 @@ end
 
 # end of sorting methods
 
-def isExecutable(path)
-	`which #{path}`
-	$?.success?
+# taken from http://stackoverflow.com/questions/2108727/which-in-ruby-checking-if-program-exists-in-path-from-ruby
+def isExecutable(cmd)
+	exts = ENV['PATHEXT'] ? ENV['PATHEXT'].split(';') : ['']
+	ENV['PATH'].split(File::PATH_SEPARATOR).each do |path|
+		exts.each { |ext|
+			exe = "#{path}/#{cmd}#{ext}"
+			return true if File.executable?(exe)
+		}
+	end
+	return false
 end
 
 def checkExists(path)
