@@ -7,6 +7,8 @@ def cleanup
 	begin
 		File.delete($programPath) unless $keep
 		File.delete($evaluatorPath) unless $keep or not $evaluator
+		Process.kill('SIGTERM', $wait_thr.pid)
+		Process.kill('SIGTERM', $ewait_thr.pid) unless not $evaluator
 	rescue
 	end
 end
@@ -98,9 +100,7 @@ end
 
 # returns path of compiled source
 def compile(path)
-	if isExecutable(path)
-		return path
-	end
+	return path if isExecutable(path)
 
 	binaryPath = File.join($testDir, File.basename(path, File.extname(path)))
 
@@ -195,33 +195,19 @@ else
 	exit 1
 end
 
-if $testDir.nil?
-	$testDir = File.realdirpath(ask("Test directory?"))
-end
+$testDir = File.realdirpath(ask("Test directory?")) if $testDir.nil?
 
-if $max.nil?
-	$max = 1.to_f
-end
+$max = 1.to_f if $max.nil?
 
-if $evalMax.nil?
-	$evalMax = 1.to_f
-end
+$evalMax = 1.to_f if $evalMax.nil?
 
-if $inExt.nil?
-	$inExt = '.in'
-end
+$inExt = '.in' if $inExt.nil?
 
-if $outExt.nil?
-	$outExt = '.out'
-end
+$outExt = '.out' if $outExt.nil?
 
-if $inExt[0] != '.'
-	$inExt = '.' + $inExt
-end
+$inExt = '.' + $inExt if $inExt[0] != '.'
 
-if $outExt[0] != '.'
-	$outExt = '.' + $outExt
-end
+$outExt = '.' + $outExt if $outExt[0] != '.'
 
 checkExists($source)
 checkExists($testDir)
@@ -254,7 +240,7 @@ for path in testCases
 		next
 	end
 	result = ""
-	stdin, stdout, stderr, wait_thr = Open3.popen3($programPath)
+	stdin, stdout, stderr, $wait_thr = Open3.popen3($programPath)
 	time = Time.now
 	begin
 		Timeout::timeout($max) do
@@ -270,14 +256,14 @@ for path in testCases
 		answer = (answer.gsub /\r\n?/, "\n").strip
 		result = (result.gsub /\r\n?/, "\n").strip
 
-		status = wait_thr.value
+		status = $wait_thr.value
 
 		evaluatorPassed = false
 
 		if $evaluator
 			begin
 				etime = Time.now
-				estdin, estdout, estderr, ewait_thr = Open3.popen3($evaluatorPath)
+				estdin, estdout, estderr, $ewait_thr = Open3.popen3($evaluatorPath)
 				Timeout::timeout($evalMax) do
 					begin
 						estdin.write(result)
@@ -286,10 +272,10 @@ for path in testCases
 					eresult = estdout.read
 				end
 
-				evaluatorPassed = ewait_thr.value.success?
+				evaluatorPassed = $ewait_thr.value.success?
 			rescue Timeout::Error
 				begin
-					Process.kill('SIGTERM', ewait_thr.pid)
+					Process.kill('SIGTERM', $ewait_thr.pid)
 				rescue Errno::ESRCH # couldn't kill
 				end
 				printCase(caseNum, result, (Time.now-etime), magenta("EVAL"), path)
@@ -313,12 +299,12 @@ for path in testCases
 		end
 	rescue Timeout::Error
 		begin
-			Process.kill('SIGTERM', wait_thr.pid)
+			Process.kill('SIGTERM', $wait_thr.pid)
 		rescue Errno::ESRCH # couldn't kill
 		end
 		printCase(caseNum, result, (Time.now-time), yellow("TIME"), path)
 		timeout += 1
-		wait_thr.value # wait the process
+		$wait_thr.value # wait the process
 	end
 	stdin.close
 	stdout.close
@@ -338,6 +324,6 @@ elsif evalerrors > 0
 else
 	$stderr.puts red("Error: ")+"No input files found."
 	$stderr.puts "Check that you inputted the correct testing directory, or try setting the -i and -o flags to the extension of the test cases."
-	end
+end
 
 cleanup
