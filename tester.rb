@@ -6,8 +6,7 @@ require 'Open3'
 def cleanup
 	begin
 		File.delete($programPath) unless $keep
-		$compilerOutput.close
-		$compilerOutput.unlink
+		File.delete($evaluatorPath) unless $keep or not $evaluator
 	rescue
 	end
 end
@@ -80,23 +79,81 @@ end
 
 # end of sorting methods
 
-def printCase(caseNum, result, answer, time, pass, dir)
+def isExecutable(path)
+	`which #{path}`
+	$?.success?
+end
+
+def checkExists(path)
+	unless File.exists?(path) or isExecutable(path)
+		$stderr.puts "#{path} does not exist."
+		exit 1
+	end
+end
+
+def printCase(caseNum, result, time, pass, dir)
 	dir = nil if $doNotShowDirs
 	puts "Case #%02s: #{pass}\t%.06ss\t#{dir}" % [caseNum, time] unless $succint
 end
 
+# returns path of compiled source
+def compile(path)
+	if isExecutable(path)
+		return path
+	end
+
+	binaryPath = File.join($testDir, File.basename(path, File.extname(path)))
+
+	compilerOutput = Tempfile.new("compiler")
+
+	if File.extname(path) == ".c"
+		system "gcc -o #{binaryPath} #{path} &> #{compilerOutput.path}"
+	elsif File.extname(path) == ".cpp"
+		system "g++ -o #{binaryPath} #{path} &> #{compilerOutput.path}"
+	else
+		$stderr.puts "This program only works with C or C++ source code."
+		exit 1
+	end
+
+	compilerMessages = compilerOutput.read
+
+	unless compilerMessages.empty?
+		unless File.exists?(binaryPath)
+			$stderr.puts red("Couldn't compile #{path}")
+		end
+		$stderr.puts yellow("Compiler output for #{path}:")
+		$stderr.puts compilerMessages
+	end
+
+	compilerOutput.close
+	compilerOutput.unlink
+
+	unless File.exists?(binaryPath)
+		cleanup
+		exit 1
+	end
+
+	return binaryPath
+end
+
 opts = OptionParser.new
 
-opts.on('-s file', 'Source file') { |file|
-	$source = file.strip
-}
+opts.banner = "Usage: #{File.basename(__FILE__)} [options] <file to test>\n"
 
 opts.on('-d directory', 'Testing directory') { |dir|
 	$testDir = File.realdirpath(dir).strip
 }
 
-opts.on('-t time', 'Maximum time to finish') { |time|
+opts.on('-e evaluator', 'Use this program to evaluate the code.') { |source|
+	$evaluator = source.strip
+}
+
+opts.on('-t time', 'Maximum time to finish (in seconds)') { |time|
 	$max = time.to_f
+}
+
+opts.on('-t evalTime', 'Maximum time for -e to evaluate (in seconds)') { |time|
+	$evalMax = time.to_f
 }
 
 opts.on('-c case number', 'Only evaluate this case') { |time|
@@ -115,22 +172,27 @@ opts.on('-p points', 'Points per case') { |points|
 	$points = points.to_i
 }
 
-opts.on('--nopath', 'Do not show the input file\'s path') { |name|
-	$doNotShowDirs = true
-}
-
-opts.on('-k', 'Keep the compiled code') { |name|
+opts.on('-k', 'Keep the compiled code') {
 	$keep = true
 }
 
-opts.on('--succint', 'Only show the final statistics.') { |name|
+opts.on('--succint', 'Only show the final statistics.') {
 	$succint = true
+}
+
+opts.on('--nopath', 'Do not show the input file\'s path') {
+	$doNotShowDirs = true
 }
 
 opts.parse!
 
-if $source.nil?
-	$source = ask("Source?")
+if ARGV.count == 0
+	$source = ask("Source?").strip
+elsif ARGV.count == 1
+	$source = ARGV[0].strip
+else
+	puts opts
+	exit 1
 end
 
 if $testDir.nil?
@@ -139,6 +201,10 @@ end
 
 if $max.nil?
 	$max = 1.to_f
+end
+
+if $evalMax.nil?
+	$evalMax = 1.to_f
 end
 
 if $inExt.nil?
@@ -157,32 +223,14 @@ if $outExt[0] != '.'
 	$outExt = '.' + $outExt
 end
 
-$programPath = File.join($testDir, File.basename($source, File.extname($source)))
+checkExists($source)
+checkExists($testDir)
 
-$compilerOutput = Tempfile.new("compiler")
+$programPath = compile($source)
 
-if File.extname($source) == ".c"
-	system "gcc -o #{$programPath} #{$source} &> #{$compilerOutput.path}"
-elsif File.extname($source) == ".cpp"
-	system "g++ -o #{$programPath} #{$source} &> #{$compilerOutput.path}"
-else
-	$stderr.puts "This program only works with C or C++ source code."
-	exit 1
-end
-
-compilerMessages = $compilerOutput.read
-
-unless compilerMessages.empty?
-	unless File.exists?($programPath)
-		$stderr.puts red("Couldn't compile the program.")
-	end
-	$stderr.puts yellow("Compiler output:")
-	$stderr.puts compilerMessages
-end
-
-unless File.exists?($programPath)
-	cleanup
-	exit 1
+if $evaluator
+	checkExists($evaluator)
+	$evaluatorPath = compile($evaluator)
 end
 
 testCases = []
@@ -194,7 +242,7 @@ Find.find($testDir) do |path|
 end
 
 caseNum = -1
-passed = timeout = failed = rte = 0
+passed = timeout = failed = rte = evalerrors = 0
 
 testCases.sort! { |a,b|
 	grouped_compare(a,b)
@@ -224,19 +272,51 @@ for path in testCases
 
 		status = wait_thr.value
 
-		if answer == result
-			printCase(caseNum, result, answer, time, green(" OK "), path)
+		evaluatorPassed = false
+
+		if $evaluator
+			begin
+				etime = Time.now
+				estdin, estdout, estderr, ewait_thr = Open3.popen3($evaluatorPath)
+				Timeout::timeout($evalMax) do
+					begin
+						estdin.write(result)
+					rescue Errno::EPIPE
+					end
+					eresult = estdout.read
+				end
+
+				evaluatorPassed = ewait_thr.value.success?
+			rescue Timeout::Error
+				begin
+					Process.kill('SIGTERM', ewait_thr.pid)
+				rescue Errno::ESRCH # couldn't kill
+				end
+				printCase(caseNum, result, (Time.now-etime), magenta("EVAL"), path)
+				evalerrors += 1
+				next
+			end
+			estdin.close
+			estdout.close
+			estderr.close
+		end
+
+		if (answer == result and not $evaluator) or evaluatorPassed
+			printCase(caseNum, result, time, green(" OK "), path)
 			passed += 1
 		elsif status.exited?
-			printCase(caseNum, result, answer, time, red(" WA "), path)
+			printCase(caseNum, result, time, red(" WA "), path)
 			failed += 1
 		else
-			printCase(caseNum, result, answer, time, orange("RTE "), path)
+			printCase(caseNum, result, time, orange("RTE "), path)
 			rte += 1
 		end
 	rescue Timeout::Error
-		Process.kill('SIGTERM', wait_thr.pid)
-		printCase(caseNum, result, answer, (Time.now-time), yellow("TIME"), path)
+		begin
+			Process.kill('SIGTERM', wait_thr.pid)
+		rescue Errno::ESRCH # couldn't kill
+		end
+		printCase(caseNum, result, (Time.now-time), yellow("TIME"), path)
 		timeout += 1
 		wait_thr.value # wait the process
 	end
@@ -253,6 +333,8 @@ if caseNum > 0
 		puts "#{passed*$points} points. (#{passed} out of #{caseNum})"
 	end
 	puts "#{passed} correct, #{timeout} timeouts, #{failed} incorrect, #{rte} runtime errors."
+elsif evalerrors > 0
+	$stderr.puts red("Error: ")+"Couldn't evaluate."
 else
 	$stderr.puts red("Error: ")+"No input files found."
 	$stderr.puts "Check that you inputted the correct testing directory, or try setting the -i and -o flags to the extension of the test cases."
