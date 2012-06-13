@@ -103,7 +103,7 @@ def printCase(caseNum, result, time, pass, dir)
 end
 
 def escapePath(path)
-	return (path.gsub /\s/, "\\ ").strip
+	return path.strip.gsub(/\s/, "\\ ")
 end
 
 # returns path of compiled source
