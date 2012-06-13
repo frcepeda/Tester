@@ -315,7 +315,7 @@ for casePath in testCases
 				eresult = ""
 				Timeout::timeout($evalMax) do
 					begin
-						estdin.write(input)# unless $noconcat
+						estdin.write(input) unless $noconcat
 						estdin.write(result)
 						estdin.flush
 					rescue Errno::EPIPE
