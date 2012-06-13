@@ -224,7 +224,7 @@ elsif ARGV.count == 1
 	$source = ARGV[0].strip
 elsif ARGV.count >= 2 and $link
 	$source = ARGV
-elsif
+else
 	puts opts
 	exit 1
 end
