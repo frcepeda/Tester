@@ -102,17 +102,22 @@ def printCase(caseNum, result, time, pass, dir)
 	puts "Case #%02s: #{pass}\t%.06ss\t#{dir}" % [caseNum, time] unless $succint
 end
 
+def escapePath(path)
+	return (path.gsub /\s/, "\\ ").strip
+end
+
 # returns path of compiled source
 def compile(path)
-	return path if isExecutable(path)
-
-	binaryPath = File.join($testDir, File.basename(path, File.extname(path)))
+	return path if isExecutable(path) and not $link
+	
+	binaryPath = File.join($testDir, File.basename($link ? $source[0] : path, File.extname(path)))
 
 	compilerOutput = Tempfile.new("compiler")
 
-	if File.extname(path) == ".c"
-		system "gcc -o #{binaryPath} #{path} &> #{compilerOutput.path}"
-	elsif File.extname(path) == ".cpp"
+# FIXME: If $link is true, it will only check the extension of the first argument.
+	if File.extname($link ? $source[0] : path) == ".c"
+		system "gcc -o \"#{binaryPath}\" #{path} &> #{compilerOutput.path}"
+	elsif File.extname($link ? $source[0] : path) == ".cpp"
 		system "g++ -o #{binaryPath} #{path} &> #{compilerOutput.path}"
 	else
 		$stderr.puts "This program only works with C or C++ source code."
@@ -123,7 +128,7 @@ def compile(path)
 
 	unless compilerMessages.empty?
 		unless File.exists?(binaryPath)
-			$stderr.puts red("Couldn't compile #{path}")
+			$stderr.puts red("Couldn't compile #{path}.")
 		end
 		$stderr.puts yellow("Compiler output for #{path}:")
 		$stderr.puts compilerMessages
@@ -140,9 +145,20 @@ def compile(path)
 	return binaryPath
 end
 
+# returns path of compiled source
+def compileArr(arr)
+	for a in arr
+		if isExecutable(a)
+			$stderr.puts red("Error: ")+"Couldn't link the source code."
+			exit 1
+		end
+	end
+	return compile(arr.join(" "))
+end
+
 opts = OptionParser.new
 
-opts.banner = "Usage: #{File.basename(__FILE__)} [options] <file to test>\n"
+opts.banner = "Usage: #{File.basename(__FILE__)} [options] <source files>\n"
 
 opts.on('-d directory', 'Testing directory') { |dir|
 	$testDir = File.realdirpath(dir).strip
@@ -154,10 +170,6 @@ opts.on('-e evaluator', 'Use this program to evaluate the code.') { |source|
 
 opts.on('-t time', 'Maximum time to finish (in seconds)') { |time|
 	$max = time.to_f
-}
-
-opts.on('-t evalTime', 'Maximum time for -e to evaluate (in seconds)') { |time|
-	$evalMax = time.to_f
 }
 
 opts.on('-c case number', 'Only evaluate this case') { |time|
@@ -180,16 +192,28 @@ opts.on('-k', 'Keep the compiled code') {
 	$keep = true
 }
 
-opts.on('--concat', 'Concatenate and send the input and output of the program to the evaluator') { |source|
-	$concat = true
+opts.on('--outputonly', 'Only send stdout to the evaluator') { |source|
+	$noconcat = true
+}
+
+opts.on('-m time', 'Maximum time for -e to evaluate (in seconds)') { |time|
+	$evalMax = time.to_f
 }
 
 opts.on('--succint', 'Only show the final statistics.') {
 	$succint = true
 }
 
+opts.on('--link', 'Link all of the source files together.') {
+	$link = true
+}
+
 opts.on('--nopath', 'Do not show the input file\'s path') {
 	$doNotShowDirs = true
+}
+
+opts.on('--stdout', 'Print the output after each test case.') {
+	$outputStdout = true
 }
 
 opts.parse!
@@ -198,7 +222,9 @@ if ARGV.count == 0
 	$source = ask("Source?").strip
 elsif ARGV.count == 1
 	$source = ARGV[0].strip
-else
+elsif ARGV.count >= 2 and $link
+	$source = ARGV
+elsif
 	puts opts
 	exit 1
 end
@@ -217,14 +243,25 @@ $inExt = '.' + $inExt if $inExt[0] != '.'
 
 $outExt = '.' + $outExt if $outExt[0] != '.'
 
-checkExists($source)
+if not $link
+	checkExists($source)
+else
+	for path in $source
+		checkExists(path)
+	end
+end
+
 checkExists($testDir)
 
-$programPath = compile($source)
+if not $link
+	$programPath = compile($source)
 
-if $evaluator
-	checkExists($evaluator)
-	$evaluatorPath = compile($evaluator)
+	if $evaluator
+		checkExists($evaluator)
+		$evaluatorPath = compile($evaluator)
+	end
+else
+	$programPath = compileArr($source)
 end
 
 testCases = []
@@ -242,18 +279,20 @@ testCases.sort! { |a,b|
 	grouped_compare(a,b)
 }
 
-for path in testCases
+for casePath in testCases
 	caseNum += 1
 	if $onlyCase.nil? == false and caseNum != $onlyCase
 		next
 	end
+	input = IO.read(casePath)
 	result = ""
-	stdin, stdout, stderr, $wait_thr = Open3.popen3($programPath)
+	puts 'wut' unless File.exists?($programPath)
+	stdin, stdout, stderr, $wait_thr = Open3.popen3(escapePath($programPath))
 	time = Time.now
 	begin
 		Timeout::timeout($max) do
 			begin
-				stdin.write(IO.read(path))
+				stdin.write(input)
 				stdin.flush
 			rescue Errno::EPIPE
 			end
@@ -261,39 +300,41 @@ for path in testCases
 			time = Time.now - time
 		end
 
-		answer = IO.read(path[0..-(($inExt.length)+1)]+$outExt)
+		answer = IO.read(casePath[0..-(($inExt.length)+1)]+$outExt)
 		answer = (answer.gsub /\r\n?/, "\n").strip
 		result = (result.gsub /\r\n?/, "\n").strip
+
+		correctAnswer = answer == result
 
 		status = $wait_thr.value
 
 		evaluatorPassed = false
-
-		if $evaluator
+		if $evaluator and not correctAnswer
 			begin
 				etime = Time.now
-				estdin, estdout, estderr, $ewait_thr = Open3.popen3($evaluatorPath)
+				estdin, estdout, estderr, $ewait_thr = Open3.popen3(escapePath($evaluatorPath))
+				eresult = ""
 				Timeout::timeout($evalMax) do
 					begin
-						estdin.write(IO.read(path)) if $concat
+						estdin.write(input)# unless $noconcat
 						estdin.write(result)
 						estdin.flush
 					rescue Errno::EPIPE
 					end
-					eresult = estdout.read
+					eresult = estdout.read.strip
 				end
 
 				evalstatus = $ewait_thr.value
 
 				raise "ERROR!" if not evalstatus.exited?
 
-				evaluatorPassed = evalstatus.success?
+				evaluatorPassed = evalstatus.success? or eresult == "OK"
 			rescue
 				begin
 					Process.kill('SIGTERM', $ewait_thr.pid)
 				rescue Errno::ESRCH # couldn't kill
 				end
-				printCase(caseNum, result, (Time.now-etime), magenta("EVAL"), path)
+				printCase(caseNum, result, (Time.now-etime), magenta("EVAL"), casePath)
 				evalerrors += 1
 				next
 			end
@@ -302,14 +343,16 @@ for path in testCases
 			estderr.close
 		end
 
-		if (answer == result and not $evaluator) or evaluatorPassed
-			printCase(caseNum, result, time, green(" OK "), path)
+		if correctAnswer or evaluatorPassed
+			printCase(caseNum, result, time, green(" OK "), casePath)
 			passed += 1
+			puts result if $outputStdout
 		elsif status.exited?
-			printCase(caseNum, result, time, red(" WA "), path)
+			printCase(caseNum, result, time, red(" WA "), casePath)
 			failed += 1
+			puts result if $outputStdout
 		else
-			printCase(caseNum, result, time, orange("RTE "), path)
+			printCase(caseNum, result, time, orange("RTE "), casePath)
 			rte += 1
 		end
 	rescue Timeout::Error
@@ -317,7 +360,7 @@ for path in testCases
 			Process.kill('SIGTERM', $wait_thr.pid)
 		rescue Errno::ESRCH # couldn't kill
 		end
-		printCase(caseNum, result, (Time.now-time), yellow("TIME"), path)
+		printCase(caseNum, result, (Time.now-time), yellow("TIME"), casePath)
 		timeout += 1
 		$wait_thr.value # wait the process
 	end
