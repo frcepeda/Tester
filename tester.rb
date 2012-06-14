@@ -345,15 +345,15 @@ for casePath in testCases
 		if correctAnswer or evaluatorPassed
 			printCase(caseNum, result, time, green(" OK "), casePath)
 			passed += 1
-			puts result if $outputStdout
 		elsif status.exited?
 			printCase(caseNum, result, time, red(" WA "), casePath)
 			failed += 1
-			puts result if $outputStdout
 		else
 			printCase(caseNum, result, time, orange("RTE "), casePath)
 			rte += 1
 		end
+
+		puts result if $outputStdout
 	rescue Timeout::Error
 		begin
 			Process.kill('SIGTERM', $wait_thr.pid)
