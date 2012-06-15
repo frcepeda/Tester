@@ -99,7 +99,12 @@ end
 
 def printCase(caseNum, result, time, pass, dir)
 	dir = nil if $doNotShowDirs
-	puts "Case #%02s: #{pass}\t%.06ss\t#{dir}" % [caseNum, time] unless $succint
+	if $doNotShowDirs
+		separator = nil
+	else
+		separator = "\t"
+	end
+	puts "Case #%02s: #{pass}\t%.06ss%s#{dir}" % [caseNum, time, separator] unless $succint
 end
 
 def escapePath(path)
