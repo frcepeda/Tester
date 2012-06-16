@@ -123,7 +123,7 @@ def compile(path)
 	if File.extname($link ? $source[0] : path) == ".c"
 		system "gcc -o \"#{binaryPath}\" #{path} &> #{compilerOutput.path}"
 	elsif File.extname($link ? $source[0] : path) == ".cpp"
-		system "g++ -o #{binaryPath} #{path} &> #{compilerOutput.path}"
+		system "g++ -o \"#{binaryPath}\" #{path} &> #{compilerOutput.path}"
 	else
 		$stderr.puts "This program only works with C or C++ source code."
 		exit 1
