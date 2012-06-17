@@ -98,13 +98,13 @@ def checkExists(path)
 end
 
 def printCase(caseNum, result, time, pass, dir)
-	dir = nil if $doNotShowDirs
 	if $doNotShowDirs
 		separator = nil
+		dir = nil
 	else
 		separator = "\t"
 	end
-	puts "Case #%02s: #{pass}\t%.06ss%s#{dir}" % [caseNum, time, separator] unless $succint
+	puts "Case #%02s: #{pass}\t%0.06fs%s#{dir}" % [caseNum, time, separator] unless $succint
 end
 
 def escapePath(path)
@@ -290,11 +290,12 @@ testCases.sort! { |a,b|
 }
 
 for casePath in testCases
-	outputPath = casePath[0..-(($inExt.length)+1)]+$outExt
 	caseNum += 1
-	if $onlyCase.nil? == false and caseNum != $onlyCase
-		next
-	end
+
+	next if $onlyCase.nil? == false and caseNum != $onlyCase
+
+	outputPath = casePath[0..-(($inExt.length)+1)]+$outExt
+
 	input = IO.read(casePath)
 	result = ""
 	puts 'wut' unless File.exists?($programPath)
@@ -320,6 +321,7 @@ for casePath in testCases
 		status = $wait_thr.value
 
 		evaluatorPassed = false
+		evaluatorCrashed = false
 		if $evaluator and not correctAnswer
 			begin
 				etime = Time.now
@@ -337,7 +339,7 @@ for casePath in testCases
 
 				evalstatus = $ewait_thr.value
 
-				raise "ERROR!" if not evalstatus.exited?
+				evaluatorCrashed = true if not evalstatus.exited?
 
 				evaluatorPassed = evalstatus.success? or eresult == "OK"
 			rescue
@@ -345,16 +347,18 @@ for casePath in testCases
 					Process.kill('SIGTERM', $ewait_thr.pid)
 				rescue Errno::ESRCH # couldn't kill
 				end
-				printCase(caseNum, result, (Time.now-etime), magenta("EVAL"), casePath)
-				evalerrors += 1
-				next
+				evaluatorCrashed = true
 			end
 			estdin.close
 			estdout.close
 			estderr.close
 		end
 
-		if correctAnswer or evaluatorPassed
+		if (not File.exists?(outputPath) and not $evaluator) or evaluatorCrashed
+			$stderr.puts yellow("Warning: ")+"#{outputPath} does not exist." unless $evaluator
+			printCase(caseNum, result, 0, magenta("EVAL"), casePath)
+			evalerrors += 1
+		elsif correctAnswer or evaluatorPassed
 			printCase(caseNum, result, time, green(" OK "), casePath)
 			passed += 1
 		elsif status.exited?
