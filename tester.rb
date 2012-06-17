@@ -108,7 +108,8 @@ def printCase(caseNum, result, time, pass, dir)
 end
 
 def escapePath(path)
-	return path.strip.gsub(/\s/, "\\ ")
+# FIXME: This will replace any whitespace with an escaped space.
+	return path.strip.gsub(/(\s)/, "\\ ")
 end
 
 # returns path of compiled source
@@ -158,6 +159,11 @@ def compileArr(arr)
 			exit 1
 		end
 	end
+
+	arr.map! { |a|
+		escapePath(a)
+	}
+
 	return compile(arr.join(" "))
 end
 
@@ -259,11 +265,11 @@ end
 checkExists($testDir)
 
 if not $link
-	$programPath = compile($source)
+	$programPath = compile(escapePath($source))
 
 	if $evaluator
 		checkExists($evaluator)
-		$evaluatorPath = compile($evaluator)
+		$evaluatorPath = compile(escapePath($evaluator))
 	end
 else
 	$programPath = compileArr($source)
@@ -284,6 +290,7 @@ testCases.sort! { |a,b|
 }
 
 for casePath in testCases
+	outputPath = casePath[0..-(($inExt.length)+1)]+$outExt
 	caseNum += 1
 	if $onlyCase.nil? == false and caseNum != $onlyCase
 		next
@@ -304,8 +311,8 @@ for casePath in testCases
 			time = Time.now - time
 		end
 
-		answer = IO.read(casePath[0..-(($inExt.length)+1)]+$outExt)
-		answer = (answer.gsub /\r\n?/, "\n").strip
+		answer = IO.read(outputPath) if File.exists?(outputPath)
+		answer = (answer.gsub /\r\n?/, "\n").strip unless answer.nil?
 		result = (result.gsub /\r\n?/, "\n").strip
 
 		correctAnswer = answer == result
