@@ -223,8 +223,8 @@ opts.on('--nopath', 'Do not show the input file\'s path') {
 	$doNotShowDirs = true
 }
 
-opts.on('--stdout', 'Print the output after each test case.') {
-	$outputStdout = true
+opts.on('--output', 'Print the output after each test case.') {
+	$output = true
 }
 
 opts.parse!
@@ -369,7 +369,7 @@ for casePath in testCases
 			rte += 1
 		end
 
-		puts result if $outputStdout
+		puts result + stderr.read if $output
 	rescue Timeout::Error
 		begin
 			Process.kill('SIGTERM', $wait_thr.pid)
