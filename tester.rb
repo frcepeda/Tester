@@ -80,14 +80,7 @@ end
 
 # taken from http://stackoverflow.com/questions/2108727/which-in-ruby-checking-if-program-exists-in-path-from-ruby
 def isExecutable(cmd)
-	exts = ENV['PATHEXT'] ? ENV['PATHEXT'].split(';') : ['']
-	ENV['PATH'].split(File::PATH_SEPARATOR).each do |path|
-		exts.each { |ext|
-			exe = "#{path}/#{cmd}#{ext}"
-			return true if File.executable?(exe)
-		}
-	end
-	return false
+	return File.executable? cmd
 end
 
 def checkExists(path)
@@ -114,7 +107,10 @@ end
 
 # returns path of compiled source
 def compile(path)
-	return path if isExecutable(path) and not $link
+	if isExecutable(path) and not $link
+		$keep = true
+		return path
+	end
 	
 	binaryPath = File.join($testDir, File.basename($link ? $source[0] : path, File.extname(path)))
 
